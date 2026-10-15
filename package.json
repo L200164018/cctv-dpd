@@ -1,0 +1,12 @@
+{
+  "name": "cctv-web-monitor",
+  "version": "1.0.0",
+  "description": "Live CCTV Surveillance Web Application ready for Vercel",
+  "main": "index.html",
+  "scripts": {
+    "start": "serve ."
+  },
+  "keywords": ["cctv", "rtsp", "webrtc", "vercel", "streaming"],
+  "author": "",
+  "license": "MIT"
+}
