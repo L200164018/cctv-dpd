@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CCTV Cloud Monitor | Vercel Edition</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
+  <style>
+    :root {
+      --bg: #070a13;
+      --panel: #111827;
+      --panel-border: #1f293d;
+      --accent: #00f2fe;
+      --accent-glow: rgba(0, 242, 254, 0.35);
+      --live-red: #ef4444;
+      --text: #f3f4f6;
+      --muted: #9ca3af;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Topbar */
+    header {
+      background: rgba(17, 24, 39, 0.9);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--panel-border);
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-badge {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, #00f2fe, #4facfe);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 15px var(--accent-glow);
+    }
+
+    .logo-badge svg {
+      width: 22px;
+      height: 22px;
+      fill: #070a13;
+    }
+
+    .brand-title h1 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .brand-title span {
+      font-size: 0.75rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .vercel-pill {
+      background: #000;
+      color: #fff;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid #333;
+      font-weight: 600;
+      font-size: 0.65rem;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .live-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: var(--live-red);
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 20px;
+    }
+
+    .live-badge.online {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: rgba(16, 185, 129, 0.4);
+      color: #10b981;
+    }
+
+    .pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 8px currentColor;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    .clock {
+      font-family: "Courier New", monospace;
+      font-size: 0.85rem;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 5px 10px;
+      border-radius: 6px;
+      border: 1px solid #232f48;
+      color: #cbd5e1;
+    }
+
+    /* Main Content */
+    main {
+      flex: 1;
+      padding: 20px;
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Gateway Bar */
+    .gateway-bar {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .gateway-input-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      min-width: 300px;
+    }
+
+    .gateway-input-group label {
+      font-size: 0.8rem;
+      color: var(--muted);
+      white-space: nowrap;
+      font-weight: 600;
+    }
+
+    .gateway-input-group input {
+      background: #070a13;
+      border: 1px solid var(--panel-border);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      flex: 1;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .gateway-input-group input:focus {
+      border-color: var(--accent);
+    }
+
+    /* Channels */
+    .channel-nav {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+
+    .channel-btn {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      color: var(--muted);
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .channel-btn:hover {
+      border-color: #38bdf8;
+      color: #fff;
+    }
+
+    .channel-btn.active {
+      background: rgba(0, 242, 254, 0.12);
+      border-color: var(--accent);
+      color: var(--accent);
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
+
+    /* Video Player */
+    .player-box {
+      position: relative;
+      background: #000;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid var(--panel-border);
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.7);
+      aspect-ratio: 16 / 9;
+      width: 100%;
+      max-height: 75vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+      display: block;
+    }
+
+    .osd {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      right: 14px;
+      display: flex;
+      justify-content: space-between;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .osd-tag {
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(4px);
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-family: "Courier New", monospace;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #00f2fe;
+      border: 1px solid rgba(0, 242, 254, 0.3);
+      text-shadow: 0 0 5px rgba(0, 242, 254, 0.5);
+    }
+
+    .loader {
+      position: absolute;
+      inset: 0;
+      background: rgba(7, 10, 19, 0.92);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      z-index: 20;
+      padding: 20px;
+      text-align: center;
+      transition: opacity 0.3s;
+    }
+
+    .loader.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 3px solid rgba(0, 242, 254, 0.15);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loader-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .loader-sub {
+      font-size: 0.85rem;
+      color: var(--muted);
+      max-width: 520px;
+      line-height: 1.5;
+    }
+
+    .info-card {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid #334155;
+      padding: 14px 18px;
+      border-radius: 8px;
+      text-align: left;
+      font-size: 0.85rem;
+      max-width: 550px;
+      color: #cbd5e1;
+      margin-top: 10px;
+    }
+
+    .info-card b {
+      color: #38bdf8;
+    }
+
+    /* Controls */
+    .controls-bar {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 12px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .btn-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn {
+      background: #1f293d;
+      border: 1px solid #374151;
+      color: var(--text);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .btn:hover {
+      background: #374151;
+      border-color: #6b7280;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #00b4d8, #0077b6);
+      border: none;
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      opacity: 0.9;
+      box-shadow: 0 0 12px rgba(0, 180, 216, 0.4);
+    }
+
+    .meta-stats {
+      display: flex;
+      gap: 16px;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .meta-stats b {
+      color: #e2e8f0;
+    }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(6px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+
+    .modal-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      width: 90%;
+      max-width: 580px;
+      padding: 24px;
+      box-shadow: 0 25px 50px rgba(0,0,0,0.8);
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .modal-header h3 {
+      font-size: 1.15rem;
+    }
+
+    .modal-close {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font-size: 1.5rem;
+      cursor: pointer;
+    }
+
+    .modal-content {
+      font-size: 0.88rem;
+      color: #cbd5e1;
+      line-height: 1.6;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .modal-content code {
+      background: #070a13;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #38bdf8;
+      font-family: monospace;
+    }
+
+    .modal-content pre {
+      background: #070a13;
+      border: 1px solid var(--panel-border);
+      padding: 12px;
+      border-radius: 8px;
+      color: #00f2fe;
+      font-family: monospace;
+      font-size: 0.8rem;
+      overflow-x: auto;
+    }
+
+    footer {
+      text-align: center;
+      padding: 16px;
+      font-size: 0.75rem;
+      color: #6b7280;
+      border-top: 1px solid var(--panel-border);
+      margin-top: auto;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="logo-badge">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+        </svg>
+      </div>
+      <div class="brand-title">
+        <h1>CCTV LIVE MONITOR</h1>
+        <span>Cloud Web Application <span class="vercel-pill">▲ VERCEL</span></span>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <div class="live-badge" id="liveBadge">
+        <div class="pulse"></div>
+        <span id="liveStatusText">CONNECTING</span>
+      </div>
+      <div class="clock" id="clock">--:--:--</div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Stream Gateway Bar -->
+    <div class="gateway-bar">
+      <div class="gateway-input-group">
+        <label for="gatewayInput">🌐 Stream Gateway (Tunnel URL):</label>
+        <input type="text" id="gatewayInput" placeholder="Contoh: https://cctv.tunnel.anda.com atau http://localhost:8889">
+        <button class="btn btn-primary" onclick="saveGateway()">Simpan & Hubungkan</button>
+      </div>
+      <button class="btn" onclick="openHelpModal()">
+        <span>❓</span> Cara Konek CCTV Lokal
+      </button>
+    </div>
+
+    <!-- Channel Selector -->
+    <div class="channel-nav">
+      <button class="channel-btn active" data-path="cctv" onclick="switchChannel('cctv', this)">
+        <span>📹</span> Cam 10 - Main (1001)
+      </button>
+      <button class="channel-btn" data-path="cctv-sub" onclick="switchChannel('cctv-sub', this)">
+        <span>📹</span> Cam 10 - Sub (1002)
+      </button>
+      <button class="channel-btn" data-path="cam1" onclick="switchChannel('cam1', this)">
+        <span>📹</span> Cam 1 - Main (101)
+      </button>
+      <button class="channel-btn" data-path="cam2" onclick="switchChannel('cam2', this)">
+        <span>📹</span> Cam 2 - Main (201)
+      </button>
+    </div>
+
+    <!-- Video Box -->
+    <div class="player-box" id="playerBox">
+      <video id="videoElement" autoplay muted playsinline controls></video>
+
+      <div class="osd">
+        <div class="osd-tag" id="osdChannel">CAM 10 [MAIN] &bull; 15.15.100.187</div>
+        <div class="osd-tag" id="osdProtocol">WebRTC (Ultra Low Latency)</div>
+      </div>
+
+      <div class="loader" id="loader">
+        <div class="spinner"></div>
+        <div class="loader-title" id="loaderTitle">Menghubungkan ke Gateway CCTV...</div>
+        <div class="loader-sub" id="loaderSub">Sedang menegosiasikan sesi WebRTC/HLS dengan server gateway.</div>
+
+        <div class="info-card" id="gatewayHint">
+          <b>ℹ️ Mengapa butuh Gateway URL?</b><br>
+          Karena web ini di-hosting di Vercel (Cloud), browser tidak bisa mengakses IP lokal <code>15.15.100.187</code> secara langsung tanpa jalur terowongan (Tunnel / Cloudflare / Port Forwarding).<br>
+          <a href="#" onclick="openHelpModal(); return false;" style="color:#00f2fe; text-decoration: underline; margin-top: 6px; display: inline-block;">Lihat panduan 1-klik menghubungkan CCTV ke Vercel &rarr;</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Controls -->
+    <div class="controls-bar">
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="reconnect()">
+          <span>🔄</span> Reconnect
+        </button>
+        <button class="btn" onclick="captureSnapshot()">
+          <span>📸</span> Ambil Snapshot
+        </button>
+        <button class="btn" onclick="toggleMute()" id="muteButton">
+          <span>🔇</span> Unmute Audio
+        </button>
+        <button class="btn" onclick="toggleFullscreen()">
+          <span>⛶</span> Fullscreen
+        </button>
+      </div>
+
+      <div class="meta-stats">
+        <span>Resolusi: <b id="statRes">-</b></span>
+        <span>Latensi: <b id="statLat">&lt; 300 ms</b></span>
+        <span>Protokol: <b id="statProto">WebRTC WHEP</b></span>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn" onclick="openHelpModal()">
+          <span>⚙️</span> Panduan Koneksi
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Help & Setup Modal -->
+  <div class="modal-backdrop" id="helpModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>🌐 Menghubungkan CCTV Lokal ke Vercel</h3>
+        <button class="modal-close" onclick="closeHelpModal()">&times;</button>
+      </div>
+      <div class="modal-content">
+        <p>Aplikasi web ini berjalan di <b>Vercel (Cloud)</b> dengan aman menggunakan HTTPS. Agar browser Anda bisa menerima streaming dari CCTV lokal (<code>rtsp://15.15.100.187:554/...</code>), ada 2 cara:</p>
+
+        <h4 style="color:#38bdf8; margin-top:8px;">Opsi 1: Cloudflare Tunnel Gratis (Rekomendasi - Bisa dibuka dari mana saja)</h4>
+        <p>Jalankan gateway lokal dengan 1 perintah Cloudflare Tunnel (tanpa perlu setting router atau beli domain):</p>
+        <pre>cloudflared.exe tunnel --url http://localhost:8889</pre>
+        <p>Anda akan mendapatkan URL aman seperti: <code>https://random-nama.trycloudflare.com</code>. Masukkan URL tersebut ke kolom <b>Stream Gateway</b> di atas, lalu klik <b>Simpan</b>.</p>
+
+        <h4 style="color:#38bdf8; margin-top:8px;">Opsi 2: Menggunakan MediaMTX Lokal di PC yang sama</h4>
+        <p>Jika Anda membuka web Vercel ini dari laptop/PC yang sama di kantor/rumah:</p>
+        <pre>http://localhost:8889</pre>
+        <p><i>Catatan: Di browser Chrome/Edge, pastikan mengizinkan koneksi insecure content jika mengakses dari HTTPS ke localhost.</i></p>
+
+        <div style="text-align: right; margin-top: 14px;">
+          <button class="btn btn-primary" onclick="closeHelpModal()">Saya Mengerti</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    CCTV Web Monitor &bull; Hosted on Vercel &bull; WebRTC WHEP / HLS Streaming Gateway
+  </footer>
+
+  <script>
+    let currentPath = 'cctv';
+    let pc = null;
+    let hls = null;
+    let isMuted = true;
+
+    const video = document.getElementById('videoElement');
+    const loader = document.getElementById('loader');
+    const loaderTitle = document.getElementById('loaderTitle');
+    const loaderSub = document.getElementById('loaderSub');
+    const liveBadge = document.getElementById('liveBadge');
+    const liveStatusText = document.getElementById('liveStatusText');
+    const statRes = document.getElementById('statRes');
+    const osdChannel = document.getElementById('osdChannel');
+    const gatewayInput = document.getElementById('gatewayInput');
+
+    // Default Gateway URL from localStorage
+    const savedGateway = localStorage.getItem('cctv_gateway_url') || 'http://localhost:8889';
+    gatewayInput.value = savedGateway;
+
+    function saveGateway() {
+      let url = gatewayInput.value.trim().replace(/\/+$/, '');
+      if (!url) url = 'http://localhost:8889';
+      localStorage.setItem('cctv_gateway_url', url);
+      reconnect();
+    }
+
+    // Live Clock
+    function updateClock() {
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      document.getElementById('clock').textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())} WIB`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // Streaming Logic
+    async function startStream(path) {
+      currentPath = path;
+      showLoading(true, 'Menghubungkan ke Stream...', `Mencoba WebRTC WHEP untuk jalur: ${path}`);
+
+      if (pc) {
+        try { pc.close(); } catch(e) {}
+        pc = null;
+      }
+      if (hls) {
+        hls.destroy();
+        hls = null;
+      }
+
+      const gatewayUrl = (localStorage.getItem('cctv_gateway_url') || 'http://localhost:8889').replace(/\/+$/, '');
+
+      // 1. Try WebRTC (WHEP)
+      try {
+        pc = new RTCPeerConnection({
+          iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+        });
+
+        pc.addTransceiver('video', { direction: 'recvonly' });
+        pc.addTransceiver('audio', { direction: 'recvonly' });
+
+        pc.ontrack = (evt) => {
+          if (evt.streams && evt.streams[0]) {
+            video.srcObject = evt.streams[0];
+          }
+        };
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        const whepEndpoint = `${gatewayUrl}/${path}/whep`;
+        const res = await fetch(whepEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/sdp' },
+          body: offer.sdp
+        });
+
+        if (!res.ok) throw new Error(`WHEP status ${res.status}`);
+
+        const answer = await res.text();
+        await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+
+        setLive(true);
+        document.getElementById('statProto').textContent = 'WebRTC (Ultra Low Latency)';
+        return;
+      } catch (err) {
+        console.warn('WebRTC WHEP gagal, mencoba HLS fallback...', err);
+      }
+
+      // 2. Fallback to HLS
+      try {
+        const hlsUrl = `${gatewayUrl.replace(':8889', ':8888')}/${path}/index.m3u8`;
+        showLoading(true, 'Beralih ke HLS Stream...', 'WebRTC tidak tersedia, menggunakan HLS player...');
+        if (Hls.isSupported()) {
+          hls = new Hls();
+          hls.loadSource(hlsUrl);
+          hls.attachMedia(video);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            video.play();
+            setLive(true);
+            document.getElementById('statProto').textContent = 'HLS (fMP4)';
+          });
+          hls.on(Hls.Events.ERROR, () => {
+            setLive(false);
+          });
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          video.src = hlsUrl;
+          video.play();
+          setLive(true);
+        }
+      } catch (err2) {
+        console.error('HLS juga gagal:', err2);
+        setLive(false);
+        showLoading(true, 'Koneksi Gagal', 'Pastikan gateway tunnel lokal aktif dan URL Gateway sudah benar.');
+      }
+    }
+
+    video.addEventListener('loadedmetadata', () => {
+      showLoading(false);
+      setLive(true);
+      statRes.textContent = `${video.videoWidth} x ${video.videoHeight}`;
+    });
+
+    video.addEventListener('playing', () => {
+      showLoading(false);
+      setLive(true);
+    });
+
+    function showLoading(show, title, desc) {
+      if (show) {
+        loader.classList.remove('hidden');
+        if (title) loaderTitle.textContent = title;
+        if (desc) loaderSub.textContent = desc;
+      } else {
+        loader.classList.add('hidden');
+      }
+    }
+
+    function setLive(isLive) {
+      if (isLive) {
+        liveBadge.className = 'live-badge online';
+        liveStatusText.textContent = 'LIVE';
+      } else {
+        liveBadge.className = 'live-badge';
+        liveStatusText.textContent = 'OFFLINE';
+      }
+    }
+
+    function switchChannel(path, btn) {
+      document.querySelectorAll('.channel-btn').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+      osdChannel.textContent = `${path.toUpperCase()} &bull; 15.15.100.187`;
+      startStream(path);
+    }
+
+    function reconnect() {
+      startStream(currentPath);
+    }
+
+    function toggleMute() {
+      isMuted = !isMuted;
+      video.muted = isMuted;
+      document.getElementById('muteButton').innerHTML = isMuted ? '<span>🔇</span> Unmute Audio' : '<span>🔊</span> Mute Audio';
+    }
+
+    function toggleFullscreen() {
+      const box = document.getElementById('playerBox');
+      if (!document.fullscreenElement) {
+        box.requestFullscreen();
+      } else {
+        document.exitFullscreen();
+      }
+    }
+
+    function captureSnapshot() {
+      if (!video.videoWidth || !video.videoHeight) {
+        alert('Stream video belum siap.');
+        return;
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const link = document.createElement('a');
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      link.download = `CCTV_${currentPath}_${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+
+    function openHelpModal() {
+      document.getElementById('helpModal').classList.add('open');
+    }
+
+    function closeHelpModal() {
+      document.getElementById('helpModal').classList.remove('open');
+    }
+
+    window.addEventListener('load', () => {
+      startStream('cctv');
+    });
+  </script>
+</body>
+</html>
