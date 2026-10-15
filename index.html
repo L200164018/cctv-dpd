@@ -684,7 +684,17 @@
 
       const gatewayUrl = (localStorage.getItem('cctv_gateway_url') || 'http://localhost:8889').replace(/\/+$/, '');
 
-      // 1. Try WebRTC (WHEP)
+      const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      const isTunnel = gatewayUrl.includes('trycloudflare.com') || gatewayUrl.includes('tunnel');
+
+      // Jika di HP atau menggunakan Cloudflare Tunnel, gunakan HLS langsung (karena WebRTC UDP diblokir proxy)
+      if (isMobile || isTunnel) {
+        startHlsStream(gatewayUrl, path);
+        return;
+      }
+
+      // 1. Coba WebRTC (WHEP) untuk Local Desktop
+      let webrtcTimer = null;
       try {
         pc = new RTCPeerConnection({
           iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
@@ -696,6 +706,9 @@
         pc.ontrack = (evt) => {
           if (evt.streams && evt.streams[0]) {
             video.srcObject = evt.streams[0];
+            clearTimeout(webrtcTimer);
+            setLive(true);
+            document.getElementById('statProto').textContent = 'WebRTC (Ultra Low Latency)';
           }
         };
 
@@ -714,38 +727,64 @@
         const answer = await res.text();
         await pc.setRemoteDescription({ type: 'answer', sdp: answer });
 
-        setLive(true);
-        document.getElementById('statProto').textContent = 'WebRTC (Ultra Low Latency)';
+        // Jika dalam 4 detik WebRTC tidak mengeluarkan frame (misal diblokir firewall/NAT), alihkan ke HLS
+        webrtcTimer = setTimeout(() => {
+          console.warn('WebRTC tidak menerima frame, beralih otomatis ke HLS...');
+          startHlsStream(gatewayUrl, path);
+        }, 4000);
+
         return;
       } catch (err) {
         console.warn('WebRTC WHEP gagal, mencoba HLS fallback...', err);
+        clearTimeout(webrtcTimer);
+        startHlsStream(gatewayUrl, path);
+      }
+    }
+
+    function startHlsStream(gatewayUrl, path) {
+      const hlsUrl = `${gatewayUrl}/${path}/index.m3u8`;
+      showLoading(true, 'Menghubungkan HLS Stream...', 'Memuat video streaming HTTP (kompatibel HP & Desktop)...');
+
+      if (pc) {
+        try { pc.close(); } catch(e) {}
+        pc = null;
+      }
+      if (hls) {
+        hls.destroy();
+        hls = null;
       }
 
-      // 2. Fallback to HLS
       try {
-        const hlsUrl = `${gatewayUrl.replace(':8889', ':8888')}/${path}/index.m3u8`;
-        showLoading(true, 'Beralih ke HLS Stream...', 'WebRTC tidak tersedia, menggunakan HLS player...');
         if (Hls.isSupported()) {
-          hls = new Hls();
+          hls = new Hls({
+            enableWorker: true,
+            lowLatencyMode: true,
+            backBufferLength: 30
+          });
           hls.loadSource(hlsUrl);
           hls.attachMedia(video);
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            video.play();
+            video.play().catch(e => console.log('Autoplay dicegah browser, klik play:', e));
             setLive(true);
-            document.getElementById('statProto').textContent = 'HLS (fMP4)';
+            document.getElementById('statProto').textContent = 'HLS (fMP4 Mobile Stream)';
           });
-          hls.on(Hls.Events.ERROR, () => {
-            setLive(false);
+          hls.on(Hls.Events.ERROR, (evt, data) => {
+            if (data.fatal) {
+              console.warn('HLS Fatal Error, retry:', data);
+              setTimeout(() => { if (hls) hls.loadSource(hlsUrl); }, 3000);
+            }
           });
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          // Safari iOS
           video.src = hlsUrl;
-          video.play();
+          video.play().catch(e => console.log('Autoplay dicegah iOS, klik play:', e));
           setLive(true);
+          document.getElementById('statProto').textContent = 'Native Apple HLS';
         }
       } catch (err2) {
-        console.error('HLS juga gagal:', err2);
+        console.error('Gagal inisialisasi HLS:', err2);
         setLive(false);
-        showLoading(true, 'Koneksi Gagal', 'Pastikan gateway tunnel lokal aktif dan URL Gateway sudah benar.');
+        showLoading(true, 'Koneksi Gagal', 'Pastikan start_tunnel.bat aktif dan Gateway URL sudah benar.');
       }
     }
 
